@@ -69,4 +69,6 @@ JDK 17
 
 ## 许可
 
-All Rights Reserved。
+本项目以 **GNU General Public License v3.0（GPLv3）** 发布，详见根目录 `LICENSE`（SPDX: `GPL-3.0-only`）。
+
+> 说明：本模组仅参考了第三方模组（精妙背包 / Create:Storage 等）的公开菜单结构信息用于兼容适配，不包含其源码。
