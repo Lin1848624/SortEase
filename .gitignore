@@ -1,0 +1,23 @@
+# Gradle / Forge
+.gradle/
+build/
+run/
+run-data/
+out/
+
+# IDE
+.idea/
+*.iml
+
+# 日志
+*.log
+logs/
+
+# 项目根目录下的第三方参考 jar（不作为本模组源码提交）
+fxntstorage-*.jar
+sophisticatedbackpacks-*.jar
+sophisticatedcore-*.jar
+biggerstacks-*.jar
+
+# 数据生成
+src/generated/

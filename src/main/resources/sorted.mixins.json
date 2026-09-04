@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.sorted.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "sorted.refmap.json",
+  "client": [
+    "AbstractContainerScreenAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
