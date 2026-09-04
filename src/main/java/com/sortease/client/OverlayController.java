@@ -4,13 +4,12 @@ import com.sortease.classify.ContainerClassifier;
 import com.sortease.classify.MenuProfile;
 import com.sortease.classify.SlotKind;
 import com.sortease.config.ClientConfig;
-import com.sortease.mixin.AbstractContainerScreenAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.inventory.Slot;
 
-/** 槽位分类覆盖层的渲染与点选逻辑。 */
+/** 槽位分类覆盖层的渲染与点选逻辑（坐标来自 OverlayGuiPos，不直接碰屏幕受保护字段）。 */
 public final class OverlayController {
     private static boolean enabled;
     private static AbstractContainerScreen<?> screen;
@@ -46,21 +45,17 @@ public final class OverlayController {
         return profile;
     }
 
-    private static int guiLeft() {
-        return ((AbstractContainerScreenAccessor) screen).sortedLeftPos();
-    }
-
-    private static int guiTop() {
-        return ((AbstractContainerScreenAccessor) screen).sortedTopPos();
+    private static boolean guiPosValid() {
+        return OverlayGuiPos.valid(screen);
     }
 
     private static int slotIndexAt(double mx, double my) {
-        if (screen == null) return -1;
+        if (screen == null || !guiPosValid()) return -1;
         var slots = screen.getMenu().slots;
         for (int i = 0; i < slots.size(); i++) {
             Slot s = slots.get(i);
-            int x0 = guiLeft() + s.x;
-            int y0 = guiTop() + s.y;
+            int x0 = OverlayGuiPos.left() + s.x;
+            int y0 = OverlayGuiPos.top() + s.y;
             if (mx >= x0 && mx < x0 + 16 && my >= y0 && my < y0 + 16) {
                 return i;
             }
@@ -95,13 +90,15 @@ public final class OverlayController {
 
     public static void render(GuiGraphics g) {
         if (!enabled || profile == null || screen == null) return;
+        // 未捕获到坐标时静默跳过（避免在异常/第三方子类屏幕上崩溃）
+        if (!guiPosValid()) return;
         Minecraft mc = Minecraft.getInstance();
         int alpha = Math.max(0, Math.min(100, ClientConfig.overlayOpacity));
         int a = alpha << 24;
         for (int i = 0; i < screen.getMenu().slots.size(); i++) {
             Slot s = screen.getMenu().slots.get(i);
-            int x0 = guiLeft() + s.x;
-            int y0 = guiTop() + s.y;
+            int x0 = OverlayGuiPos.left() + s.x;
+            int y0 = OverlayGuiPos.top() + s.y;
             int ov = i < overrides.length ? overrides[i] : 0;
             SlotKind kind = profile.kind(i);
             int color = (baseColor(kind) & 0x00FFFFFF) | a;

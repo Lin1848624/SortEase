@@ -3,9 +3,9 @@
   "minVersion": "0.8",
   "package": "com.sortease.mixin",
   "compatibilityLevel": "JAVA_17",
-  "refmap": "sorted.refmap.json",
+  "refmap": "sortease.refmap.json",
   "client": [
-    "AbstractContainerScreenAccessor"
+    "AbstractContainerScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1
