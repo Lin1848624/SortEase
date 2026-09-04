@@ -1,9 +1,9 @@
-# Sorted —— 动态堆叠感知的一键整理模组 · 方案设计
+# SortEase（曾用名 Sorted）—— 动态堆叠感知的一键整理模组 · 方案设计
 
 - 日期：2026-09-04（v1，待审批）
 - 目标平台：Minecraft 1.20.1 · Forge 47.4.22（official mappings）· Java 17
-- mod id：`sorted`；项目目录：`D:\mcmod\Sorted`
-- 状态：设计已获批；M1~M5 已实现并通过编译/单元测试（引擎 8 项测试全绿），M6 已通过反编译锁定 Create:Storage(fxntstorage 1.2.6) / 精妙背包(3.24.67) 槽位结构并录入通用“风险槽名 + 最大主体存储”识别规则。产物：`build/libs/sorted-0.1.0.jar`。**待玩家放入实际整合真机回归**。
+- mod id：`sortease`；项目目录：`D:\mcmod\Sorted`
+- 状态：设计已获批；M1~M5 已实现并通过编译/单元测试（引擎 8 项测试全绿），M6 已通过反编译锁定 Create:Storage(fxntstorage 1.2.6) / 精妙背包(3.24.67) 槽位结构并录入通用“风险槽名 + 最大主体存储”识别规则。产物：`build/libs/sortease-0.1.0.jar`。**待玩家放入实际整合真机回归**。
 
 ---
 
