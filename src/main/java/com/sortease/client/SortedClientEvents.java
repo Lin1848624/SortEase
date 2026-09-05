@@ -10,8 +10,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -23,7 +29,32 @@ import java.util.List;
 public final class SortedClientEvents {
     private static long lastSortMs;
 
+    /** 视觉去重：上次整理完成后客户端界面内容签名；内容未变化时按键直接忽略。 */
+    private static long lastViewSig;
+    private static boolean hasViewBaseline;
+    private static int pendingViewCapture;
+
     private SortedClientEvents() {}
+
+    /** 客户端侧对“玩家看到的菜单内容”做签名（与服务端签名同构，用于判断界面是否变了）。 */
+    private static long viewSigOf(AbstractContainerMenu menu) {
+        long h = 0x9E3779B97F4A7C15L;
+        for (Slot s : menu.slots) {
+            long v = 0;
+            ItemStack it = s.getItem();
+            if (!it.isEmpty()) {
+                ResourceLocation id = BuiltInRegistries.ITEM.getKey(it.getItem());
+                String name = id == null ? "<unknown>" : id.toString();
+                v = name.hashCode();
+                v = v * 31 + it.getCount();
+                long tagH = it.getTag() == null ? 0 : it.getTag().hashCode();
+                v = v * 31 + tagH;
+            }
+            h ^= v;
+            h *= 0x100000001B3L;
+        }
+        return h;
+    }
 
     private static boolean pressed(int keyCode, net.minecraft.client.KeyMapping mapping) {
         return mapping.getKey().getValue() == keyCode;
@@ -94,6 +125,10 @@ public final class SortedClientEvents {
             return;
         }
 
+        // 视觉去重：界面显示的内容与上次整理完成时完全一致 → 无需再发请求（避免无意义挪动）。
+        long curSig = viewSigOf(scr.getMenu());
+        if (hasViewBaseline && curSig == lastViewSig) return;
+
         List<Integer> forceSort = new ArrayList<>();
         List<Integer> forceIgnore = new ArrayList<>();
         int[] ovr = OverrideStore.allOf(profile.menuKey, profile.slotCount());
@@ -110,5 +145,22 @@ public final class SortedClientEvents {
                 ClientConfig.includePlayerMain, ClientConfig.includeHotbar,
                 forceSort.stream().mapToInt(Integer::intValue).toArray(),
                 forceIgnore.stream().mapToInt(Integer::intValue).toArray()));
+    }
+
+    /** 收到服务端“整理完成/无需整理”回执后调用：等槽位同步落定再记录基准，供视觉去重使用。 */
+    public static void scheduleViewCapture() {
+        pendingViewCapture = 2;
+    }
+
+    @SubscribeEvent
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || pendingViewCapture <= 0) return;
+        if (--pendingViewCapture == 0) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null && mc.screen instanceof AbstractContainerScreen<?> scr) {
+                lastViewSig = viewSigOf(scr.getMenu());
+                hasViewBaseline = true;
+            }
+        }
     }
 }

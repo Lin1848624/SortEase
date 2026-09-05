@@ -12,7 +12,6 @@ public final class ServerTickHandler {
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
-        if (!SortJobManager.hasJobs()) return;
         try {
             SortJobManager.tickServer(event.getServer());
         } catch (RuntimeException ex) {

@@ -10,8 +10,11 @@ public final class SortedClientNet {
     public static void onAck(SortAckMessage msg) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
-        // 正常完成/无变化：静默，不弹 ActionBar
-        if (msg.code == SortAckMessage.OK || msg.code == SortAckMessage.NO_CHANGE) return;
+        // 正常完成/无变化：静默，不弹 ActionBar；并安排记录“整理后界面基准”，供视觉去重。
+        if (msg.code == SortAckMessage.OK || msg.code == SortAckMessage.NO_CHANGE) {
+            SortedClientEvents.scheduleViewCapture();
+            return;
+        }
 
         String key = msg.messageKey;
         if (key == null || key.isEmpty()) {

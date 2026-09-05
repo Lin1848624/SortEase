@@ -32,14 +32,15 @@ public final class ReorderState<E> {
         this.slots = tmp.stream().mapToInt(Integer::intValue).toArray();
     }
 
-    /** 与某槽位"是否已就位"匹配：空槽匹配空槽，非空槽需物品相同且排序等价。 */
+    /** 与某槽位"是否已就位"匹配：空槽匹配空槽，非空槽需物品内容等价且排序等价。 */
     private boolean matches(int slotIndex, E desired, long desiredCount) {
         E actual = view.itemAt(slotIndex);
         long actualCount = view.countAt(slotIndex);
         if (actual == null || actualCount <= 0) return desired == null;
         if (desired == null) return false;
-        return (actual == desired || actual.equals(desired))
-                && cmp.compare(actual, actualCount, desired, desiredCount) == 0;
+        // 1.20.1 的 ItemStack.equals 是对象同一性比较，必须用内容等价判定“是否同一物品”
+        boolean sameStack = actual == desired || view.sameItem(actual, desired);
+        return sameStack && cmp.compare(actual, actualCount, desired, desiredCount) == 0;
     }
 
     /** 返回下一次交换；无更多无序槽位时返回 null。 */

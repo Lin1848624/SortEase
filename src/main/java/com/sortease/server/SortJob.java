@@ -3,6 +3,7 @@ package com.sortease.server;
 import com.sortease.SortedMod;
 import com.sortease.classify.ContainerClassifier;
 import com.sortease.classify.MenuProfile;
+import com.sortease.classify.SlotKind;
 import com.sortease.config.ServerConfig;
 import com.sortease.engine.MergeOp;
 import com.sortease.engine.OrderCmp;
@@ -10,11 +11,17 @@ import com.sortease.engine.ReorderState;
 import com.sortease.engine.SortEngine;
 import com.sortease.engine.SwapOp;
 import com.sortease.networking.msg.SortAckMessage;
+import com.sortease.networking.msg.SortRequestMessage;
 import com.sortease.sort.SortMode;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.CraftingContainer;
+import net.minecraft.world.inventory.ResultContainer;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -26,6 +33,7 @@ import java.util.function.BooleanSupplier;
 /** 一次「一键整理」的服务端任务：按 tick 分片执行合并 + 同存储内重排，全程权威校验。 */
 public final class SortJob {
     private final ServerPlayer player;
+    private final SortRequestMessage request;
     private final int containerId;
     private final String menuClass;
     private final SortMode mode;
@@ -35,6 +43,8 @@ public final class SortJob {
     private final int maskCount;
 
     private boolean mergesDone;
+    private boolean preflightDone;
+    private boolean finishedClean; // 任务结束时容器是否已达“无可合并 + 全组有序”的整洁终态
     private boolean change;
     private int totalOps;
     private int ticks;
@@ -54,36 +64,70 @@ public final class SortJob {
     }
 
     public SortJob(ServerPlayer player, AbstractContainerMenu menu, MenuProfile profile,
-                   boolean includePlayerMain, boolean includeHotbar,
-                   int[] forceSort, int[] forceIgnore,
-                   int modeOrdinal, boolean ascending) {
+            SortRequestMessage msg) {
         this.player = player;
+        this.request = msg;
         this.containerId = menu.containerId;
         this.menuClass = menu.getClass().getName();
-        this.mode = SortMode.byOrdinal(modeOrdinal);
-        this.ascending = ascending;
+        this.mode = SortMode.byOrdinal(msg.mode);
+        this.ascending = msg.ascending;
+        boolean includePlayerMain = msg.includePlayerMain;
+        boolean includeHotbar = msg.includeHotbar;
+        int[] forceSort = msg.forceSort;
+        int[] forceIgnore = msg.forceIgnore;
 
         int n = menu.slots.size();
         this.mask = new boolean[n];
         int count = 0;
         for (int i = 0; i < n; i++) {
+            Slot slot = menu.getSlot(i);
             boolean base;
-            switch (profile.kind(i)) {
-                case MAIN -> base = true;
-                case PLAYER_MAIN -> base = includePlayerMain;
-                case PLAYER_HOTBAR -> base = includeHotbar;
-                default -> base = false;
+            if (slot.container instanceof Inventory) {
+                // 玩家背包类槽位：只允许主栏(容器序号 9..35)与快捷栏(0..8)；
+                // 护甲/副手(序号>=36)恒不参与（它们与主物品栏同属一个玩家容器对象）。
+                // “自己的物品栏界面”(InventoryMenu)：主栏始终可整理，
+                // 快捷栏是否整理仍由 includeHotbar 开关决定（不随界面自动开启）。
+                int cs = slot.getContainerSlot();
+                boolean ownInventory = profile.inventoryScreen || !profile.hasMainContainer;
+                base = cs >= 0 && cs <= 35;
+                if (cs <= 8) {
+                    base &= includeHotbar;
+                } else {
+                    base &= includePlayerMain || ownInventory;
+                }
+            } else {
+                base = profile.kind(i) == SlotKind.MAIN;
             }
             this.mask[i] = base;
-            if (base) count++;
+            if (base)
+                count++;
         }
-        if (forceSort != null) for (int i : forceSort) if (i >= 0 && i < n && !mask[i]) {
-            mask[i] = true;
-            count++;
-        }
-        if (forceIgnore != null) for (int i : forceIgnore) if (i >= 0 && i < n && mask[i]) {
-            mask[i] = false;
-            count--;
+        if (forceSort != null)
+            for (int i : forceSort)
+                if (i >= 0 && i < n && !mask[i]) {
+                    mask[i] = true;
+                    count++;
+                }
+        if (forceIgnore != null)
+            for (int i : forceIgnore)
+                if (i >= 0 && i < n && mask[i]) {
+                    mask[i] = false;
+                    count--;
+                }
+        // 硬隔离：护甲/副手与合成区/结果槽即使被“强制参与”也一律清除，
+        // 防止分类偏差或误点把装备/配方槽并入整理组而整组阻塞（原版物品栏无法整理的根因）。
+        for (int i = 0; i < n; i++) {
+            Slot slot = menu.getSlot(i);
+            Container c = slot.container;
+            boolean unsafe = c instanceof CraftingContainer || c instanceof ResultContainer;
+            if (!unsafe && c instanceof Inventory) {
+                int cs = slot.getContainerSlot();
+                unsafe = cs < 0 || cs >= 36;
+            }
+            if (unsafe && mask[i]) {
+                mask[i] = false;
+                count--;
+            }
         }
         this.maskCount = Math.max(0, count);
 
@@ -123,8 +167,10 @@ public final class SortJob {
                 case ID -> r = pathOf(a).compareTo(pathOf(b));
                 default -> r = String.CASE_INSENSITIVE_ORDER.compare(displayOf(a), displayOf(b));
             }
-            if (r == 0) r = pathOf(a).compareTo(pathOf(b));
-            if (r == 0) r = namespaceOf(a).compareTo(namespaceOf(b));
+            if (r == 0)
+                r = pathOf(a).compareTo(pathOf(b));
+            if (r == 0)
+                r = namespaceOf(a).compareTo(namespaceOf(b));
             return ascending ? r : -r;
         };
     }
@@ -135,11 +181,32 @@ public final class SortJob {
         return player.containerMenu != null && player.containerMenu.containerId == containerId;
     }
 
+    int containerId() {
+        return containerId;
+    }
+
+    String menuClassName() {
+        return menuClass;
+    }
+
+    ServerPlayer player() {
+        return player;
+    }
+
+    SortRequestMessage request() {
+        return request;
+    }
+
+    boolean finishedClean() {
+        return finishedClean;
+    }
+
     /** 执行一个 tick 内的分片；返回 true 表示任务结束（应从管理器移除）。 */
     public boolean tick() {
         AbstractContainerMenu menu = player.containerMenu;
         ticks++;
-        if (!menuAlive()) return true;
+        if (!menuAlive())
+            return true;
         if (!menu.getCarried().isEmpty()) {
             SortJobManager.sendAck(player, SortAckMessage.CANCELLED, "sorted.ack.cursor_blocked");
             return true;
@@ -147,6 +214,19 @@ public final class SortJob {
         if (ticks > ServerConfig.maxJobTicks || totalOps > ServerConfig.hardMaxOps) {
             SortJobManager.sendAck(player, SortAckMessage.CANCELLED, "sorted.ack.timeout");
             return true;
+        }
+
+        // 预检：当前已无合并且所有组都已按目标有序时，零操作直接结束。
+        // 这样“已经整理过”再按整理键不会产生任何槽位写入/广播，也没有挪动动画。
+        if (!preflightDone) {
+            preflightDone = true;
+            if (preflightClean(menu)) {
+                finishedClean = true;
+                SortJobManager.sendAck(player, SortAckMessage.NO_CHANGE, "");
+                SortedMod.LOGGER.info("[Sorted] preflight-clean menu={} mode={} maskSlots={}", menuClass, mode,
+                        maskCount);
+                return true;
+            }
         }
 
         int budget = ServerConfig.maxOpsPerTick;
@@ -180,7 +260,8 @@ public final class SortJob {
             runReorderPhase(menu, budget);
         }
 
-        if (anyThisTick) menu.broadcastChanges();
+        if (anyThisTick)
+            menu.broadcastChanges();
         if (mergesDone && reorderDone()) {
             finish(menu);
             return true;
@@ -189,10 +270,19 @@ public final class SortJob {
     }
 
     private void finish(AbstractContainerMenu menu) {
+        // 结束前复核是否真正到达“无可合并 + 全组有序”的终态；
+        // 只有整洁终态才允许记录 LAST_STATE，否则下次按键会重新整理（防止误抑制）。
+        boolean clean = preflightClean(menu);
+        this.finishedClean = clean;
         if (change) {
             SortJobManager.sendAck(player, SortAckMessage.OK, "");
-            SortedMod.LOGGER.info("[Sorted] done menu={} mode={} maskSlots={} merges={} swaps={} ops={} ticks={}",
-                    menuClass, mode, maskCount, appliedMerges, appliedSwaps, totalOps, ticks);
+            SortedMod.LOGGER.info(
+                    "[Sorted] done menu={} mode={} maskSlots={} merges={} swaps={} ops={} ticks={} clean={}",
+                    menuClass, mode, maskCount, appliedMerges, appliedSwaps, totalOps, ticks, clean);
+            if (!clean) {
+                SortedMod.LOGGER.warn("[Sorted] finished-but-not-clean menu={} {}", menuClass,
+                        structureSummary(menu));
+            }
         } else if (maskCount == 0) {
             SortJobManager.sendAck(player, SortAckMessage.NO_CHANGE, "sorted.ack.no_sortable");
             SortedMod.LOGGER.info("[Sorted] nothing sortable menu={} mode={} maskSlots=0", menuClass, mode);
@@ -203,6 +293,22 @@ public final class SortJob {
         }
     }
 
+    /** 预检：是否已无任何可合并项，且每个存储组都已按当前目标有序。 */
+    private boolean preflightClean(AbstractContainerMenu menu) {
+        McSlotView view = new McSlotView(menu, mask, takeable);
+        if (SortEngine.findMerge(view) != null)
+            return false;
+        for (GroupState gs : buildGroups(menu)) {
+            if (gs.slots.size() < 2)
+                continue;
+            ReorderState<ItemStack> probe = new ReorderState<>(new GroupSlotView(menu, gs.slots),
+                    comparator(mode, ascending));
+            if (probe.next() != null)
+                return false;
+        }
+        return true;
+    }
+
     /** 诊断用：可整理槽里的非空数量、各存储组大小、以及首批物品样例。 */
     private String structureSummary(AbstractContainerMenu menu) {
         StringBuilder sb = new StringBuilder();
@@ -211,7 +317,8 @@ public final class SortJob {
         java.util.List<String> samples = new ArrayList<>();
         int shown = 0;
         for (int i = 0; i < menu.slots.size(); i++) {
-            if (!mask[i]) continue;
+            if (!mask[i])
+                continue;
             Object key = ContainerClassifier.storageKeyOf(menu.getSlot(i));
             groups.merge(key, 1, Integer::sum);
             ItemStack st = menu.getSlot(i).getItem();
@@ -234,7 +341,8 @@ public final class SortJob {
         sb.append("nonEmptyMaskSlots=").append(nonEmpty).append(" groups=[");
         boolean first = true;
         for (int g : groups.values()) {
-            if (!first) sb.append(',');
+            if (!first)
+                sb.append(',');
             sb.append(g);
             first = false;
         }
@@ -243,20 +351,25 @@ public final class SortJob {
     }
 
     private boolean reorderDone() {
-        if (groupStates == null) return true;
+        if (groupStates == null)
+            return true;
         for (GroupState gs : groupStates) {
-            if (!gs.blocked && gs.state != null && !gs.state.done()) return false;
+            if (!gs.blocked && gs.state != null && !gs.state.done())
+                return false;
         }
         return true;
     }
 
     private boolean runReorderPhase(AbstractContainerMenu menu, int budget) {
         boolean applied = false;
-        if (groupStates == null) groupStates = buildGroups(menu);
-        if (mode == SortMode.MERGE || groupStates.isEmpty()) return false;
+        if (groupStates == null)
+            groupStates = buildGroups(menu);
+        if (mode == SortMode.MERGE || groupStates.isEmpty())
+            return false;
 
         for (GroupState gs : groupStates) {
-            if (gs.blocked || budget <= 0) continue;
+            if (gs.blocked || budget <= 0)
+                continue;
             if (gs.state == null) {
                 if (gs.slots.size() >= 2) {
                     gs.state = new ReorderState<>(new GroupSlotView(menu, gs.slots), comparator(mode, ascending));
@@ -286,13 +399,17 @@ public final class SortJob {
         SlotHandle src = new SlotHandle(menu.getSlot(op.from()));
         SlotHandle dst = new SlotHandle(menu.getSlot(op.to()));
         ItemStack s = src.getLive();
-        if (s.isEmpty()) return false;
+        if (s.isEmpty())
+            return false;
         ItemStack d = dst.getLive();
-        if (!d.isEmpty() && !ItemStack.isSameItemSameTags(s, d)) return false;
-        if (!dst.mayPlace(s)) return false;
+        if (!d.isEmpty() && !ItemStack.isSameItemSameTags(s, d))
+            return false;
+        if (!dst.mayPlace(s))
+            return false;
 
         ItemStack removed = src.removePartial(op.amount());
-        if (removed.isEmpty()) return false;
+        if (removed.isEmpty())
+            return false;
         long left = dst.insert(removed);
         boolean moved = left < removed.getCount();
         if (left > 0) {
@@ -312,22 +429,33 @@ public final class SortJob {
         }
         ItemStack va = sa.getLive().copy();
         ItemStack vb = sb.getLive().copy();
-        if (!sa.mayPlace(vb) || !sb.mayPlace(va)) return false;
-        if (!sa.setWhole(vb)) return false;
-        if (!sb.setWhole(va)) return false;
+        if (!sa.mayPlace(vb) || !sb.mayPlace(va))
+            return false;
+        // 内容完全相同：无需真正写入，避免“每次重排都触发一次无意义的槽位更新动画”
+        if (ItemStack.isSameItemSameTags(va, vb) && va.getCount() == vb.getCount())
+            return true;
+        // 两阶段写入 + 失败回滚：保证交换原子性，任一槽拒绝时不留单侧变更
+        if (!sa.setWhole(vb))
+            return false;
+        if (!sb.setWhole(va)) {
+            sa.setWhole(va);
+            return false;
+        }
         return true;
     }
 
     private List<GroupState> buildGroups(AbstractContainerMenu menu) {
         IdentityHashMap<Object, List<Integer>> map = new IdentityHashMap<>();
         for (int i = 0; i < menu.slots.size(); i++) {
-            if (!mask[i]) continue;
+            if (!mask[i])
+                continue;
             Object key = ContainerClassifier.storageKeyOf(menu.getSlot(i));
             map.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
         }
         List<GroupState> out = new ArrayList<>();
         for (List<Integer> idxs : map.values()) {
-            if (idxs.size() >= 2) out.add(new GroupState(idxs));
+            if (idxs.size() >= 2)
+                out.add(new GroupState(idxs));
         }
         return out;
     }
