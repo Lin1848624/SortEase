@@ -3,8 +3,8 @@ package com.sortease.server;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.SlotItemHandler;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.SlotItemHandler;
 
 /**
  * 对单个服务端菜单槽位的权威读写封装。
@@ -108,7 +108,7 @@ public final class SlotHandle {
         }
         ItemStack cur = slot.getItem();
         if (!cur.isEmpty()) {
-            if (!ItemStack.isSameItemSameTags(cur, toAdd)) return toAdd.getCount();
+            if (!ItemStack.isSameItemSameComponents(cur, toAdd)) return toAdd.getCount();
         } else if (!slot.mayPlace(toAdd)) {
             return toAdd.getCount();
         }

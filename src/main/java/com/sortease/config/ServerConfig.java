@@ -1,26 +1,27 @@
 package com.sortease.config;
 
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
+import com.sortease.SortedMod;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
-/** 服务端配置 sorted-server.toml（整理引擎预算等权威项，客户端只需与之同步）。 */
-@Mod.EventBusSubscriber(modid = "sortease", bus = Mod.EventBusSubscriber.Bus.MOD)
+/** 服务端配置 sortease-server.toml（整理引擎预算等权威项）。 */
+@EventBusSubscriber(modid = SortedMod.MODID)
 public final class ServerConfig {
-    private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
+    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    public static final ForgeConfigSpec.IntValue MAX_OPS_PER_TICK = BUILDER
+    public static final ModConfigSpec.IntValue MAX_OPS_PER_TICK = BUILDER
             .comment("整理引擎每个服务端 tick 最多执行的槽位原子操作数（防大容器卡顿）")
             .defineInRange("maxOpsPerTick", 128, 8, 4096);
-    public static final ForgeConfigSpec.IntValue MAX_JOB_TICKS = BUILDER
+    public static final ModConfigSpec.IntValue MAX_JOB_TICKS = BUILDER
             .comment("单个整理任务允许跨越的最大 tick 数（防异常死循环）")
             .defineInRange("maxJobTicks", 1200, 50, 60000);
-    public static final ForgeConfigSpec.IntValue HARD_MAX_OPS = BUILDER
+    public static final ModConfigSpec.IntValue HARD_MAX_OPS = BUILDER
             .comment("单个整理任务累计原子操作硬上限（安全阀）")
             .defineInRange("hardMaxOps", 40000, 1000, 500000);
 
-    public static final ForgeConfigSpec SPEC = BUILDER.build();
+    public static final ModConfigSpec SPEC = BUILDER.build();
 
     public static int maxOpsPerTick;
     public static int maxJobTicks;
@@ -29,7 +30,8 @@ public final class ServerConfig {
     private ServerConfig() {}
 
     @SubscribeEvent
-    static void onLoad(final ModConfigEvent event) {
+    public static void onLoad(final ModConfigEvent event) {
+        if (event.getConfig().getSpec() != SPEC) return;
         refresh();
     }
 

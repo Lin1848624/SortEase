@@ -7,7 +7,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,7 +69,7 @@ public class SortedConfigScreen extends Screen {
                 .bounds(right - 96, bottomY, 96, 20).build());
     }
 
-    private RowDef boolRow(String labelKey, ForgeConfigSpec.BooleanValue value) {
+    private RowDef boolRow(String labelKey, ModConfigSpec.BooleanValue value) {
         return new RowDef(labelKey, (x, y, w, h) -> Button.builder(currentBoolText(value), b -> {
             value.set(!value.get());
             refreshAndSave();
@@ -94,7 +94,7 @@ public class SortedConfigScreen extends Screen {
         return Component.translatable(MODE_KEYS[ClientConfig.SORT_MODE.get()]);
     }
 
-    private static Component currentBoolText(ForgeConfigSpec.BooleanValue value) {
+    private static Component currentBoolText(ModConfigSpec.BooleanValue value) {
         return Component.translatable(value.get() ? "gui.sorted.on" : "gui.sorted.off");
     }
 
@@ -123,9 +123,9 @@ public class SortedConfigScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mx, int my, float partialTick) {
-        this.renderBackground(g);
-        g.drawCenteredString(this.font, this.title, this.width / 2, 6, 0xFFFFFF);
+        // 1.21.1 的 Screen#render 内部会先调用 renderBackground(g, mx, my, partialTick)
         super.render(g, mx, my, partialTick);
+        g.drawCenteredString(this.font, this.title, this.width / 2, 6, 0xFFFFFF);
     }
 
     @Override

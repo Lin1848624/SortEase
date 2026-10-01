@@ -3,7 +3,6 @@ package com.sortease.server;
 import com.sortease.engine.InventoryView;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.List;
 
@@ -48,7 +47,7 @@ final class GroupSlotView implements InventoryView<ItemStack> {
 
     @Override
     public boolean sameItem(ItemStack a, ItemStack b) {
-        return ItemStack.isSameItemSameTags(a, b);
+        return ItemStack.isSameItemSameComponents(a, b);
     }
 
     @Override

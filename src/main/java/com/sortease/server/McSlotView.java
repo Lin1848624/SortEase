@@ -59,7 +59,7 @@ public final class McSlotView implements InventoryView<ItemStack> {
 
     @Override
     public boolean sameItem(ItemStack a, ItemStack b) {
-        return ItemStack.isSameItemSameTags(a, b);
+        return ItemStack.isSameItemSameComponents(a, b);
     }
 
     @Override

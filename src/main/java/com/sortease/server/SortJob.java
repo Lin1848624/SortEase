@@ -10,8 +10,8 @@ import com.sortease.engine.OrderCmp;
 import com.sortease.engine.ReorderState;
 import com.sortease.engine.SortEngine;
 import com.sortease.engine.SwapOp;
-import com.sortease.networking.msg.SortAckMessage;
-import com.sortease.networking.msg.SortRequestMessage;
+import com.sortease.networking.msg.SortAckPayload;
+import com.sortease.networking.msg.SortRequestPayload;
 import com.sortease.sort.SortMode;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -33,7 +33,7 @@ import java.util.function.BooleanSupplier;
 /** 一次「一键整理」的服务端任务：按 tick 分片执行合并 + 同存储内重排，全程权威校验。 */
 public final class SortJob {
     private final ServerPlayer player;
-    private final SortRequestMessage request;
+    private final SortRequestPayload request;
     private final int containerId;
     private final String menuClass;
     private final SortMode mode;
@@ -64,17 +64,17 @@ public final class SortJob {
     }
 
     public SortJob(ServerPlayer player, AbstractContainerMenu menu, MenuProfile profile,
-            SortRequestMessage msg) {
+            SortRequestPayload msg) {
         this.player = player;
         this.request = msg;
         this.containerId = menu.containerId;
         this.menuClass = menu.getClass().getName();
-        this.mode = SortMode.byOrdinal(msg.mode);
-        this.ascending = msg.ascending;
-        boolean includePlayerMain = msg.includePlayerMain;
-        boolean includeHotbar = msg.includeHotbar;
-        int[] forceSort = msg.forceSort;
-        int[] forceIgnore = msg.forceIgnore;
+        this.mode = SortMode.byOrdinal(msg.mode());
+        this.ascending = msg.ascending();
+        boolean includePlayerMain = msg.includePlayerMain();
+        boolean includeHotbar = msg.includeHotbar();
+        int[] forceSort = msg.forceSort();
+        int[] forceIgnore = msg.forceIgnore();
 
         int n = menu.slots.size();
         this.mask = new boolean[n];
@@ -193,7 +193,7 @@ public final class SortJob {
         return player;
     }
 
-    SortRequestMessage request() {
+    SortRequestPayload request() {
         return request;
     }
 
@@ -208,11 +208,11 @@ public final class SortJob {
         if (!menuAlive())
             return true;
         if (!menu.getCarried().isEmpty()) {
-            SortJobManager.sendAck(player, SortAckMessage.CANCELLED, "sorted.ack.cursor_blocked");
+            SortJobManager.sendAck(player, SortAckPayload.CANCELLED, "sorted.ack.cursor_blocked");
             return true;
         }
         if (ticks > ServerConfig.maxJobTicks || totalOps > ServerConfig.hardMaxOps) {
-            SortJobManager.sendAck(player, SortAckMessage.CANCELLED, "sorted.ack.timeout");
+            SortJobManager.sendAck(player, SortAckPayload.CANCELLED, "sorted.ack.timeout");
             return true;
         }
 
@@ -222,7 +222,7 @@ public final class SortJob {
             preflightDone = true;
             if (preflightClean(menu)) {
                 finishedClean = true;
-                SortJobManager.sendAck(player, SortAckMessage.NO_CHANGE, "");
+                SortJobManager.sendAck(player, SortAckPayload.NO_CHANGE, "");
                 SortedMod.LOGGER.info("[Sorted] preflight-clean menu={} mode={} maskSlots={}", menuClass, mode,
                         maskCount);
                 return true;
@@ -275,7 +275,7 @@ public final class SortJob {
         boolean clean = preflightClean(menu);
         this.finishedClean = clean;
         if (change) {
-            SortJobManager.sendAck(player, SortAckMessage.OK, "");
+            SortJobManager.sendAck(player, SortAckPayload.OK, "");
             SortedMod.LOGGER.info(
                     "[Sorted] done menu={} mode={} maskSlots={} merges={} swaps={} ops={} ticks={} clean={}",
                     menuClass, mode, maskCount, appliedMerges, appliedSwaps, totalOps, ticks, clean);
@@ -284,10 +284,10 @@ public final class SortJob {
                         structureSummary(menu));
             }
         } else if (maskCount == 0) {
-            SortJobManager.sendAck(player, SortAckMessage.NO_CHANGE, "sorted.ack.no_sortable");
+            SortJobManager.sendAck(player, SortAckPayload.NO_CHANGE, "sorted.ack.no_sortable");
             SortedMod.LOGGER.info("[Sorted] nothing sortable menu={} mode={} maskSlots=0", menuClass, mode);
         } else {
-            SortJobManager.sendAck(player, SortAckMessage.NO_CHANGE, "");
+            SortJobManager.sendAck(player, SortAckPayload.NO_CHANGE, "");
             SortedMod.LOGGER.info("[Sorted] no change menu={} mode={} maskSlots={} ops={} ticks={} {}", menuClass, mode,
                     maskCount, totalOps, ticks, structureSummary(menu));
         }
@@ -402,7 +402,7 @@ public final class SortJob {
         if (s.isEmpty())
             return false;
         ItemStack d = dst.getLive();
-        if (!d.isEmpty() && !ItemStack.isSameItemSameTags(s, d))
+        if (!d.isEmpty() && !ItemStack.isSameItemSameComponents(s, d))
             return false;
         if (!dst.mayPlace(s))
             return false;
@@ -423,8 +423,8 @@ public final class SortJob {
     private boolean applySwap(AbstractContainerMenu menu, int aIdx, int bIdx) {
         SlotHandle sa = new SlotHandle(menu.getSlot(aIdx));
         SlotHandle sb = new SlotHandle(menu.getSlot(bIdx));
-        if ((sa.isHandler() && !(sa.handler() instanceof net.minecraftforge.items.IItemHandlerModifiable))
-                || (sb.isHandler() && !(sb.handler() instanceof net.minecraftforge.items.IItemHandlerModifiable))) {
+        if ((sa.isHandler() && !(sa.handler() instanceof net.neoforged.neoforge.items.IItemHandlerModifiable))
+                || (sb.isHandler() && !(sb.handler() instanceof net.neoforged.neoforge.items.IItemHandlerModifiable))) {
             return false;
         }
         ItemStack va = sa.getLive().copy();
@@ -432,7 +432,7 @@ public final class SortJob {
         if (!sa.mayPlace(vb) || !sb.mayPlace(va))
             return false;
         // 内容完全相同：无需真正写入，避免“每次重排都触发一次无意义的槽位更新动画”
-        if (ItemStack.isSameItemSameTags(va, vb) && va.getCount() == vb.getCount())
+        if (ItemStack.isSameItemSameComponents(va, vb) && va.getCount() == vb.getCount())
             return true;
         // 两阶段写入 + 失败回滚：保证交换原子性，任一槽拒绝时不留单侧变更
         if (!sa.setWhole(vb))

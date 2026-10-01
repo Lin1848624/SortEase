@@ -1,6 +1,8 @@
 # SortEase — 动态堆叠感知的一键整理模组
 
-> Minecraft **1.20.1 · Forge 47.x** 的一键整理模组。
+> Minecraft **1.21.1 · NeoForge 21.1.x** 的一键整理模组。
+
+> 版本与分支：`0.1.x` = Forge 1.20.1 版（`main` 分支）；`0.2.x` = NeoForge 1.21.1 移植版（本分支）。
 
 **源码仓库**：<https://github.com/Lin1848624/Sortease>（GPLv3）
 
@@ -24,9 +26,11 @@ SortEase 面向“大堆叠 + 复杂第三方容器”场景设计：整理逻�
   - 大背包按 tick 预算分片处理，不卡服；
   - 排序中关界面/拿起物品会安全中止，绝不产生半截移动。
 
+> 1.21.1 说明：物品数据由 **数据组件（Data Components）** 取代了旧版 NBT，堆叠等价判定改用 `ItemStack.isSameItemSameComponents`、界面内容签名改用 `ItemStack.hashItemAndComponents`，整理行为与 1.20.1 版保持一致。
+
 ## 安装
 
-- 环境：Minecraft 1.20.1 + Forge 47.x。
+- 环境：Minecraft 1.21.1 + NeoForge 21.1.x（游戏本身需 Java 21）。
 - 将 `sortease-*.jar` 放入 `mods/` 目录。
 - **客户端与服务端（含单人世界的集成服务端）都需要安装**——排序由服务端执行；单机使用天然满足。
 
@@ -58,16 +62,27 @@ SortEase 面向“大堆叠 + 复杂第三方容器”场景设计：整理逻�
 - 已针对 **Bigger Stacks** 类大堆叠环境验证（百万级到 `Integer.MAX_VALUE` 级）；
 - 已通过反编译适配 **精妙背包(Sophisticated Backpacks)** 与 **Create: Storage(fxntstorage)** 的菜单结构；
 - 通用“风险槽名”规则使其对同类第三方容器也具备默认保护，未识别的特例可在分类视图中手工调整。
+- 第三方容器识别只看**菜单/槽位类名与容量**，不绑定具体模组版本，因此精妙背包、Create: Storage 等模组的 1.21.1 版本依旧走同一套归类规则。
 
 ## 从源码构建
 
 ```text
-JDK 17
+JDK 21
 .\gradlew build          # Windows
 ./gradlew build          # Linux/macOS
 ```
 
+构建使用 NeoForge 官方 **ModDevGradle**（`net.neoforged.moddev` 2.0.148）+ NeoForge 21.1.252；
+首次构建需要联网下载 Minecraft/NeoForge 工件，之后走本地缓存。
+
 产物位于 `build/libs/sortease-<version>.jar`。
+
+本地调试运行（可选）：
+
+```text
+.\gradlew runClient      # 启动带本模组的开发客户端
+.\gradlew runServer      # 启动开发服务端
+```
 
 ## 许可
 

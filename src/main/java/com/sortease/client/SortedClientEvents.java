@@ -1,31 +1,32 @@
 package com.sortease.client;
 
+import com.sortease.SortedMod;
 import com.sortease.classify.ContainerClassifier;
 import com.sortease.classify.MenuProfile;
 import com.sortease.config.ClientConfig;
-import com.sortease.networking.Networking;
-import com.sortease.networking.msg.SortRequestMessage;
+import com.sortease.networking.msg.SortRequestPayload;
 import com.sortease.sort.SortMode;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.ScreenEvent;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** 客户端事件接线：覆盖层渲染/交互、整理快捷键、设置界面。 */
-@Mod.EventBusSubscriber(modid = "sortease", value = Dist.CLIENT)
+@EventBusSubscriber(modid = SortedMod.MODID, value = Dist.CLIENT)
 public final class SortedClientEvents {
     private static long lastSortMs;
 
@@ -47,8 +48,8 @@ public final class SortedClientEvents {
                 String name = id == null ? "<unknown>" : id.toString();
                 v = name.hashCode();
                 v = v * 31 + it.getCount();
-                long tagH = it.getTag() == null ? 0 : it.getTag().hashCode();
-                v = v * 31 + tagH;
+                // 1.21 用数据组件取代了 NBT：hashItemAndComponents 覆盖物品 + 组件内容
+                v = v * 31 + ItemStack.hashItemAndComponents(it);
             }
             h ^= v;
             h *= 0x100000001B3L;
@@ -56,7 +57,7 @@ public final class SortedClientEvents {
         return h;
     }
 
-    private static boolean pressed(int keyCode, net.minecraft.client.KeyMapping mapping) {
+    private static boolean pressed(int keyCode, KeyMapping mapping) {
         return mapping.getKey().getValue() == keyCode;
     }
 
@@ -79,7 +80,7 @@ public final class SortedClientEvents {
     }
 
     @SubscribeEvent
-    public static void onMouse(ScreenEvent.MouseButtonPressed event) {
+    public static void onMouse(ScreenEvent.MouseButtonPressed.Pre event) {
         if (OverlayController.isEnabled()
                 && OverlayController.handleClick(event.getButton(), event.getMouseX(), event.getMouseY())) {
             event.setCanceled(true);
@@ -87,7 +88,7 @@ public final class SortedClientEvents {
     }
 
     @SubscribeEvent
-    public static void onKey(ScreenEvent.KeyPressed event) {
+    public static void onKey(ScreenEvent.KeyPressed.Pre event) {
         if (event.getScreen().getFocused() instanceof EditBox) return;
         int kc = event.getKeyCode();
         Minecraft mc = Minecraft.getInstance();
@@ -140,7 +141,7 @@ public final class SortedClientEvents {
 
         int mode = Math.max(0, Math.min(SortMode.values().length - 1, ClientConfig.sortMode));
         int containerId = scr.getMenu().containerId;
-        Networking.CHANNEL.sendToServer(new SortRequestMessage(
+        PacketDistributor.sendToServer(new SortRequestPayload(
                 containerId, mode, ClientConfig.sortAscending,
                 ClientConfig.includePlayerMain, ClientConfig.includeHotbar,
                 forceSort.stream().mapToInt(Integer::intValue).toArray(),
@@ -153,8 +154,8 @@ public final class SortedClientEvents {
     }
 
     @SubscribeEvent
-    public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || pendingViewCapture <= 0) return;
+    public static void onClientTick(ClientTickEvent.Post event) {
+        if (pendingViewCapture <= 0) return;
         if (--pendingViewCapture == 0) {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null && mc.screen instanceof AbstractContainerScreen<?> scr) {

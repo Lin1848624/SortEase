@@ -1,11 +1,9 @@
 package com.sortease.server;
 
-import com.sortease.SortedMod;
 import com.sortease.classify.ContainerClassifier;
 import com.sortease.classify.MenuProfile;
-import com.sortease.networking.Networking;
-import com.sortease.networking.msg.SortAckMessage;
-import com.sortease.networking.msg.SortRequestMessage;
+import com.sortease.networking.msg.SortAckPayload;
+import com.sortease.networking.msg.SortRequestPayload;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -13,7 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,28 +43,28 @@ public final class SortJobManager {
         final int[] forceSort;
         final int[] forceIgnore;
 
-        Entry(int containerId, String menuClass, long sig, SortRequestMessage msg) {
+        Entry(int containerId, String menuClass, long sig, SortRequestPayload msg) {
             this.containerId = containerId;
             this.menuClass = menuClass;
             this.sig = sig;
-            this.mode = msg.mode;
-            this.ascending = msg.ascending;
-            this.includePlayerMain = msg.includePlayerMain;
-            this.includeHotbar = msg.includeHotbar;
-            this.forceSort = msg.forceSort.clone();
-            this.forceIgnore = msg.forceIgnore.clone();
+            this.mode = msg.mode();
+            this.ascending = msg.ascending();
+            this.includePlayerMain = msg.includePlayerMain();
+            this.includeHotbar = msg.includeHotbar();
+            this.forceSort = msg.forceSort().clone();
+            this.forceIgnore = msg.forceIgnore().clone();
         }
 
-        boolean matches(AbstractContainerMenu menu, long currentSig, SortRequestMessage msg) {
+        boolean matches(AbstractContainerMenu menu, long currentSig, SortRequestPayload msg) {
             return containerId == menu.containerId
                     && menuClass.equals(menu.getClass().getName())
                     && sig == currentSig
-                    && mode == msg.mode
-                    && ascending == msg.ascending
-                    && includePlayerMain == msg.includePlayerMain
-                    && includeHotbar == msg.includeHotbar
-                    && Arrays.equals(forceSort, msg.forceSort)
-                    && Arrays.equals(forceIgnore, msg.forceIgnore);
+                    && mode == msg.mode()
+                    && ascending == msg.ascending()
+                    && includePlayerMain == msg.includePlayerMain()
+                    && includeHotbar == msg.includeHotbar()
+                    && Arrays.equals(forceSort, msg.forceSort())
+                    && Arrays.equals(forceIgnore, msg.forceIgnore());
         }
     }
 
@@ -76,10 +74,10 @@ public final class SortJobManager {
     public static void sendAck(ServerPlayer player, int code, String key) {
         if (player == null)
             return;
-        Networking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SortAckMessage(code, key));
+        PacketDistributor.sendToPlayer(player, new SortAckPayload(code, key));
     }
 
-    /** 对菜单全部槽位按“位置 × (物品id × 数量 × NBT哈希)”计算签名；任何变动都会改变它。 */
+    /** 对菜单全部槽位按“位置 × (物品id × 数量 × 数据组件哈希)”计算签名；任何变动都会改变它。 */
     private static long signatureOf(AbstractContainerMenu menu) {
         long h = 0x9E3779B97F4A7C15L;
         for (Slot s : menu.slots) {
@@ -90,8 +88,8 @@ public final class SortJobManager {
                 String name = id == null ? "<unknown>" : id.toString();
                 v = name.hashCode();
                 v = v * 31 + it.getCount();
-                long tagH = it.getTag() == null ? 0 : it.getTag().hashCode();
-                v = v * 31 + tagH;
+                // 1.21 用数据组件取代了 NBT：hashItemAndComponents 覆盖物品 + 组件内容
+                v = v * 31 + ItemStack.hashItemAndComponents(it);
             }
             h ^= v;
             h *= 0x100000001B3L;
@@ -99,34 +97,34 @@ public final class SortJobManager {
         return h;
     }
 
-    public static void onSortRequest(ServerPlayer player, SortRequestMessage msg) {
+    public static void onSortRequest(ServerPlayer player, SortRequestPayload msg) {
         if (player == null)
             return;
         AbstractContainerMenu menu = player.containerMenu;
-        if (menu == null || menu.containerId != msg.containerId) {
-            sendAck(player, SortAckMessage.UNSUPPORTED, "sorted.ack.no_container");
+        if (menu == null || menu.containerId != msg.containerId()) {
+            sendAck(player, SortAckPayload.UNSUPPORTED, "sorted.ack.no_container");
             return;
         }
         ItemStack carried = menu.getCarried();
         if (!carried.isEmpty()) {
-            sendAck(player, SortAckMessage.CANCELLED, "sorted.ack.cursor_blocked");
+            sendAck(player, SortAckPayload.CANCELLED, "sorted.ack.cursor_blocked");
             return;
         }
         UUID id = player.getUUID();
         if (JOBS.containsKey(id)) {
-            sendAck(player, SortAckMessage.BUSY, "");
+            sendAck(player, SortAckPayload.BUSY, "");
             return;
         }
         // 状态签名去重：同一容器、同一整理参数，且自上次整理后内容/布局无任何变化 → 直接静默跳过
         Entry prev = LAST_STATE.get(id);
         long sig = signatureOf(menu);
         if (prev != null && prev.matches(menu, sig, msg)) {
-            sendAck(player, SortAckMessage.NO_CHANGE, "");
+            sendAck(player, SortAckPayload.NO_CHANGE, "");
             return;
         }
         MenuProfile profile = ContainerClassifier.classify(menu, player.getInventory());
         if (!profile.canSort()) {
-            sendAck(player, SortAckMessage.UNSUPPORTED, "sorted.ack.unsupported");
+            sendAck(player, SortAckPayload.UNSUPPORTED, "sorted.ack.unsupported");
             return;
         }
         JOBS.put(id, new SortJob(player, menu, profile, msg));

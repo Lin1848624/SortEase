@@ -2,8 +2,7 @@
   "required": false,
   "minVersion": "0.8",
   "package": "com.sortease.mixin",
-  "compatibilityLevel": "JAVA_17",
-  "refmap": "sortease.refmap.json",
+  "compatibilityLevel": "JAVA_21",
   "client": [
     "AbstractContainerScreenMixin"
   ],
