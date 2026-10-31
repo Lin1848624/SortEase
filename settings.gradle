@@ -11,3 +11,24 @@ pluginManagement {
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '0.7.0'
 }
+
+// 本机 ~/.gradle/init.gradle 会在 settingsEvaluated 阶段清空插件/依赖仓库，
+// 因此在该回调之后重新补上 Forge / Sponge 仓库，避免 ForgeGradle 解析失败。
+gradle.settingsEvaluated { settings ->
+    settings.pluginManagement.repositories.maven {
+        name = 'ForgeMaven'
+        url = 'https://maven.minecraftforge.net/'
+    }
+    settings.pluginManagement.repositories.maven {
+        name = 'SpongeMaven'
+        url = 'https://repo.spongepowered.org/repository/maven-public/'
+    }
+    settings.dependencyResolutionManagement.repositories.maven {
+        name = 'ForgeMaven'
+        url = 'https://maven.minecraftforge.net/'
+    }
+    settings.dependencyResolutionManagement.repositories.maven {
+        name = 'SpongeMaven'
+        url = 'https://repo.spongepowered.org/repository/maven-public/'
+    }
+}
