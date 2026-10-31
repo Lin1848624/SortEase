@@ -36,9 +36,10 @@
   "sorted.ack.cursor_blocked": "Drop what you are holding first",
   "sorted.ack.timeout": "Sorting timed out and was cancelled",
 
-  "sorted.overlay.hint": "SortEase overlay: LMB=cycle slot type, RMB=reset, press P to exit",
+  "sorted.overlay.hint": "SortEase overlay: LMB=cycle slot type (dimmed = ignored/locked), RMB=reset, press P to exit",
   "sorted.slotkind.main": "Main storage",
   "sorted.slotkind.player_main": "Player inventory",
   "sorted.slotkind.player_hotbar": "Hotbar",
+  "sorted.slotkind.deep_pockets": "Deep Pockets",
   "sorted.slotkind.special": "Special (ignored by default)"
 }

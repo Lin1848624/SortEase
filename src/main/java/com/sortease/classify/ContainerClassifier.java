@@ -42,6 +42,11 @@ public final class ContainerClassifier {
 
     private static final java.util.List<Preset> PRESETS = new java.util.ArrayList<>();
 
+    static {
+        // 内置兼容预设：Inventorio（深口袋 / 快捷腰带 / 工具腰带）
+        addPreset(new InventorioPreset());
+    }
+
     private ContainerClassifier() {}
 
     public static void addPreset(Preset preset) {
@@ -52,6 +57,15 @@ public final class ContainerClassifier {
         if (slot instanceof SlotItemHandler sh) return sh.getItemHandler();
         Object c = slot.container;
         return c != null ? c : slot;
+    }
+
+    /** 槽位当前是否可用（第三方模组可能动态禁用槽位，如 Inventorio 未解锁的深口袋行）。 */
+    public static boolean isActive(Slot slot) {
+        try {
+            return slot.isActive();
+        } catch (RuntimeException ex) {
+            return false;
+        }
     }
 
     private static int storageSize(Object key) {

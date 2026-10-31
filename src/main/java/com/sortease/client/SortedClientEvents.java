@@ -154,7 +154,10 @@ public final class SortedClientEvents {
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || pendingViewCapture <= 0) return;
+        if (event.phase != TickEvent.Phase.END) return;
+        // 深口袋附魔等级变化会让槽位可用性改变，覆盖层需要跟着重新分类。
+        OverlayController.refreshIfStale();
+        if (pendingViewCapture <= 0) return;
         if (--pendingViewCapture == 0) {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player != null && mc.screen instanceof AbstractContainerScreen<?> scr) {

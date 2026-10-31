@@ -78,6 +78,8 @@ public final class SortJob {
 
         int n = menu.slots.size();
         this.mask = new boolean[n];
+        // “自己的物品栏界面”(原版 InventoryMenu / Inventorio 物品栏)：主栏始终可整理。
+        boolean ownInventory = profile.inventoryScreen || !profile.hasMainContainer;
         int count = 0;
         for (int i = 0; i < n; i++) {
             Slot slot = menu.getSlot(i);
@@ -85,16 +87,18 @@ public final class SortJob {
             if (slot.container instanceof Inventory) {
                 // 玩家背包类槽位：只允许主栏(容器序号 9..35)与快捷栏(0..8)；
                 // 护甲/副手(序号>=36)恒不参与（它们与主物品栏同属一个玩家容器对象）。
-                // “自己的物品栏界面”(InventoryMenu)：主栏始终可整理，
                 // 快捷栏是否整理仍由 includeHotbar 开关决定（不随界面自动开启）。
                 int cs = slot.getContainerSlot();
-                boolean ownInventory = profile.inventoryScreen || !profile.hasMainContainer;
                 base = cs >= 0 && cs <= 35;
                 if (cs <= 8) {
                     base &= includeHotbar;
                 } else {
                     base &= includePlayerMain || ownInventory;
                 }
+            } else if (profile.kind(i) == SlotKind.DEEP_POCKETS) {
+                // 深口袋（Inventorio）：玩家背包的延伸，跟随主栏规则；
+                // 自己的背包界面下始终参与，避免“关闭整理玩家主栏”时深口袋反被跳过。
+                base = includePlayerMain || ownInventory;
             } else {
                 base = profile.kind(i) == SlotKind.MAIN;
             }
@@ -123,6 +127,14 @@ public final class SortJob {
             if (!unsafe && c instanceof Inventory) {
                 int cs = slot.getContainerSlot();
                 unsafe = cs < 0 || cs >= 36;
+            }
+            if (!unsafe && profile.hardLocked(i)) {
+                // 预设永久锁定：Inventorio 的快捷腰带 / 工具腰带 / 未解锁深口袋 / 快捷栏等。
+                unsafe = true;
+            }
+            if (!unsafe && !ContainerClassifier.isActive(slot)) {
+                // 第三方模组动态禁用的槽位（如 Inventorio 未解锁的深口袋行、BlockedSlot）。
+                unsafe = true;
             }
             if (unsafe && mask[i]) {
                 mask[i] = false;

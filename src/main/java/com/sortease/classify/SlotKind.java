@@ -8,6 +8,8 @@ public enum SlotKind {
     PLAYER_MAIN,
     /** 快捷栏 */
     PLAYER_HOTBAR,
+    /** 深口袋（Inventorio 的 Deep Pockets 附魔，属于玩家背包的延伸） */
+    DEEP_POCKETS,
     /** 特殊区域：升级槽/过滤槽/护甲/副手/合成格/结果格等（默认不操作） */
     SPECIAL;
 

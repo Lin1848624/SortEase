@@ -36,9 +36,10 @@
   "sorted.ack.cursor_blocked": "请先放下手中物品再整理",
   "sorted.ack.timeout": "整理超时已中止",
 
-  "sorted.overlay.hint": "SortEase 分类视图：左键=切换槽位类型，右键=恢复自动，按 P 退出",
+  "sorted.overlay.hint": "SortEase 分类视图：左键=切换槽位类型（灰暗=忽略/锁定），右键=恢复自动，按 P 退出",
   "sorted.slotkind.main": "主体存储",
   "sorted.slotkind.player_main": "玩家主栏",
   "sorted.slotkind.player_hotbar": "快捷栏",
+  "sorted.slotkind.deep_pockets": "深口袋（附魔）",
   "sorted.slotkind.special": "特殊区域(默认忽略)"
 }
